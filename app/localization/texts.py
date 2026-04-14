@@ -42,7 +42,7 @@ _DYNAMIC_LANGUAGE_CONFIGS = {
         'support_info': (
             '\n🛟 <b>پشتیبانی</b>\n\n'
             'برای هرگونه سؤال به پشتیبانی پیام دهید:\n\n'
-            '👤 {support_username}\n\n'
+            '👤 {support_tg_username}\n\n'
             '• 🎫 ایجاد تیکت\n'
             '• 📋 تیکت‌های من\n'
             '• 💬 تماس مستقیم\n'
@@ -66,7 +66,7 @@ _DYNAMIC_LANGUAGE_CONFIGS = {
         'support_info': (
             '\n🛠️ <b>Технічна підтримка</b>\n\n'
             'З усіх питань звертайтеся до нашої підтримки:\n\n'
-            '👤 {support_username}\n\n'
+            '👤 {support_tg_username}\n\n'
             'Ми допоможемо з:\n'
             '• Налаштуванням підключення\n'
             '• Вирішенням технічних проблем\n'
@@ -81,7 +81,7 @@ _DYNAMIC_LANGUAGE_CONFIGS = {
         'support_info': (
             '\n🛠️ <b>技术支持</b>\n\n'
             '如有任何问题，请联系我们的支持团队：\n\n'
-            '👤 {support_username}\n\n'
+            '👤 {support_tg_username}\n\n'
             '我们将帮助您：\n'
             '• 设置连接\n'
             '• 解决技术问题\n'
@@ -136,7 +136,7 @@ def _build_dynamic_values(language: str) -> dict[str, Any]:
 
     support_template = config.get('support_info')
     if support_template:
-        values['SUPPORT_INFO'] = support_template.format(support_username=settings.SUPPORT_USERNAME)
+        values['SUPPORT_INFO'] = support_template.format(support_tg_username=settings.SUPPORT_TG_USERNAME)
 
     return values
 

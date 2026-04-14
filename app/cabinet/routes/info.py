@@ -93,7 +93,7 @@ class SupportConfigResponse(BaseModel):
     tickets_enabled: bool
     support_type: str  # "tickets", "profile", "url", "both"
     support_url: str | None = None
-    support_username: str | None = None
+    support_tg_username: str | None = None
     support_vk_url: str | None = None
 
 
@@ -228,7 +228,7 @@ async def get_service_info():
         name=getattr(settings, 'SERVICE_NAME', None) or getattr(settings, 'BOT_NAME', 'VPN Service'),
         description=getattr(settings, 'SERVICE_DESCRIPTION', None),
         support_email=getattr(settings, 'SUPPORT_EMAIL', None),
-        support_telegram=getattr(settings, 'SUPPORT_USERNAME', None) or getattr(settings, 'SUPPORT_TELEGRAM', None),
+        support_telegram=getattr(settings, 'SUPPORT_TG_USERNAME', None) or getattr(settings, 'SUPPORT_TELEGRAM', None),
         website=getattr(settings, 'WEBSITE_URL', None),
     )
 
@@ -306,6 +306,6 @@ async def get_support_config():
         tickets_enabled=tickets_enabled,
         support_type=support_type,
         support_url=None,  # Cabinet doesn't use custom URLs
-        support_username=settings.SUPPORT_USERNAME,  # Always return for fallback
-        support_vk_url=settings.MINIAPP_SUPPORT_VK_URL or None,
+        support_tg_username=settings.SUPPORT_TG_USERNAME,  # Always return for fallback
+        support_vk_url=settings.SUPPORT_VK_URL or None,
     )

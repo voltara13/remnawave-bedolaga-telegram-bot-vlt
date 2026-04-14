@@ -36,7 +36,8 @@ class Settings(BaseSettings):
     TEST_EMAIL: str = ''  # e.g., test@example.com
     TEST_EMAIL_PASSWORD: str = ''  # Password for test account
 
-    SUPPORT_USERNAME: str = '@support'
+    SUPPORT_TG_USERNAME: str = '@support'
+    SUPPORT_VK_URL: str = ''  # VK community/group URL for additional support contact
     SUPPORT_MENU_ENABLED: bool = True
     SUPPORT_SYSTEM_MODE: str = 'both'  # one of: tickets, contact, both
     # SLA for support tickets
@@ -49,7 +50,6 @@ class Settings(BaseSettings):
     MINIAPP_TICKETS_ENABLED: bool = True  # Enable/disable tickets section in miniapp
     MINIAPP_SUPPORT_TYPE: str = 'tickets'  # one of: tickets, profile, url
     MINIAPP_SUPPORT_URL: str = ''  # Custom URL to redirect when tickets disabled (only for url type)
-    MINIAPP_SUPPORT_VK_URL: str = ''  # VK community/group URL for additional support contact
 
     ADMIN_NOTIFICATIONS_ENABLED: bool = False
     ADMIN_NOTIFICATIONS_CHAT_ID: str | None = None
@@ -2481,7 +2481,7 @@ class Settings(BaseSettings):
         return unlimited_package['price'] if unlimited_package else 0
 
     def _clean_support_contact(self) -> str:
-        return (self.SUPPORT_USERNAME or '').strip()
+        return (self.SUPPORT_TG_USERNAME or '').strip()
 
     def get_support_contact_url(self) -> str | None:
         contact = self._clean_support_contact()

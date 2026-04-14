@@ -1438,7 +1438,7 @@
   "SUB_STATUS_TRIAL_TOMORROW": "🎁试用订阅\n⚠️明天过期！",
   "SUCCESS": "✅成功",
   "SUPPORT_BUTTON": "🆘支持",
-  "SUPPORT_INFO": "\n🛠️<b>技术支持</b>\n\n如有任何问题，请联系我们的支持团队：\n\n👤{settings.SUPPORT_USERNAME}\n\n我们将帮助您：\n•设置连接\n•解决技术问题 \n•付款问题\n•其他问题\n\n⏰响应时间：通常在1-2小时内\n",
+  "SUPPORT_INFO": "\n🛠️<b>技术支持</b>\n\n如有任何问题，请联系我们的支持团队：\n\n👤{settings.SUPPORT_TG_USERNAME}\n\n我们将帮助您：\n•设置连接\n•解决技术问题 \n•付款问题\n•其他问题\n\n⏰响应时间：通常在1-2小时内\n",
   "SUSPICIOUS_DISPLAY_NAME_BLOCKED": "🚫我们检测到您的显示名称类似于链接或服务帐户。请更改您的Telegram个人资料名称后重试。",
   "SWITCH_TRAFFIC_BUTTON": "🔄切换流量",
   "SWITCH_TRAFFIC_CONFIRM": "\n🔄<b>确认切换流量</b>\n\n当前限制：{current_traffic}\n新限制：{new_traffic}\n\n操作：{action}\n💰{cost}\n\n确认切换吗？\n",

@@ -1511,7 +1511,7 @@
   "SUB_STATUS_TRIAL_TOMORROW": "🎁 Trial subscription\n⚠️ expires tomorrow!",
   "SUCCESS": "✅ Success",
   "SUPPORT_BUTTON": "🆘 Support",
-  "SUPPORT_INFO": "\n🛠️ <b>Technical support</b>\n\nFor any questions contact our support:\n\n👤 {settings.SUPPORT_USERNAME}\n\nWe can help with:\n• Connection setup\n• Troubleshooting issues\n• Payment questions\n• Other requests\n\n⏰ Response time: usually within 1-2 hours\n",
+  "SUPPORT_INFO": "\n🛠️ <b>Technical support</b>\n\nFor any questions contact our support:\n\n👤 {settings.SUPPORT_TG_USERNAME}\n\nWe can help with:\n• Connection setup\n• Troubleshooting issues\n• Payment questions\n• Other requests\n\n⏰ Response time: usually within 1-2 hours\n",
   "SUSPICIOUS_DISPLAY_NAME_BLOCKED": "🚫 We detected that your display name looks like a link or an official account. Please change your Telegram name and try again.",
   "SWITCH_TRAFFIC_BUTTON": "🔄 Switch traffic",
   "SWITCH_TRAFFIC_CONFIRM": "\n🔄 <b>Confirm traffic change</b>\n\nCurrent limit: {current_traffic}\nNew limit: {new_traffic}\n\nAction: {action}\n💰 {cost}\n\nApply this change?\n",

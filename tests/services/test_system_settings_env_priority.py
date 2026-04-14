@@ -15,13 +15,13 @@ async def test_env_override_prevents_set_value(monkeypatch):
     bot_configuration_service.initialize_definitions()
 
     env_value = 'env_support'
-    monkeypatch.setattr(settings, 'SUPPORT_USERNAME', env_value)
+    monkeypatch.setattr(settings, 'SUPPORT_TG_USERNAME', env_value)
     original_values = dict(bot_configuration_service._original_values)
-    original_values['SUPPORT_USERNAME'] = env_value
+    original_values['SUPPORT_TG_USERNAME'] = env_value
     monkeypatch.setattr(bot_configuration_service, '_original_values', original_values)
 
     env_keys = set(bot_configuration_service._env_override_keys)
-    env_keys.add('SUPPORT_USERNAME')
+    env_keys.add('SUPPORT_TG_USERNAME')
     monkeypatch.setattr(bot_configuration_service, '_env_override_keys', env_keys)
     monkeypatch.setattr(bot_configuration_service, '_overrides_raw', {})
 
@@ -35,27 +35,27 @@ async def test_env_override_prevents_set_value(monkeypatch):
 
     await bot_configuration_service.set_value(
         object(),
-        'SUPPORT_USERNAME',
+        'SUPPORT_TG_USERNAME',
         'db_support',
     )
 
-    assert env_value == settings.SUPPORT_USERNAME
-    assert not bot_configuration_service.has_override('SUPPORT_USERNAME')
+    assert env_value == settings.SUPPORT_TG_USERNAME
+    assert not bot_configuration_service.has_override('SUPPORT_TG_USERNAME')
 
 
 async def test_env_override_prevents_reset_value(monkeypatch):
     bot_configuration_service.initialize_definitions()
 
     env_value = 'env_support'
-    monkeypatch.setattr(settings, 'SUPPORT_USERNAME', env_value)
+    monkeypatch.setattr(settings, 'SUPPORT_TG_USERNAME', env_value)
     original_values = dict(bot_configuration_service._original_values)
-    original_values['SUPPORT_USERNAME'] = env_value
+    original_values['SUPPORT_TG_USERNAME'] = env_value
     monkeypatch.setattr(bot_configuration_service, '_original_values', original_values)
 
     env_keys = set(bot_configuration_service._env_override_keys)
-    env_keys.add('SUPPORT_USERNAME')
+    env_keys.add('SUPPORT_TG_USERNAME')
     monkeypatch.setattr(bot_configuration_service, '_env_override_keys', env_keys)
-    monkeypatch.setattr(bot_configuration_service, '_overrides_raw', {'SUPPORT_USERNAME': 'db'})
+    monkeypatch.setattr(bot_configuration_service, '_overrides_raw', {'SUPPORT_TG_USERNAME': 'db'})
 
     async def fake_delete(db, key):
         return None
@@ -67,24 +67,24 @@ async def test_env_override_prevents_reset_value(monkeypatch):
 
     await bot_configuration_service.reset_value(
         object(),
-        'SUPPORT_USERNAME',
+        'SUPPORT_TG_USERNAME',
     )
 
-    assert env_value == settings.SUPPORT_USERNAME
-    assert not bot_configuration_service.has_override('SUPPORT_USERNAME')
+    assert env_value == settings.SUPPORT_TG_USERNAME
+    assert not bot_configuration_service.has_override('SUPPORT_TG_USERNAME')
 
 
 async def test_initialize_skips_db_value_for_env_override(monkeypatch):
     bot_configuration_service.initialize_definitions()
 
     env_value = 'env_support'
-    monkeypatch.setattr(settings, 'SUPPORT_USERNAME', env_value)
+    monkeypatch.setattr(settings, 'SUPPORT_TG_USERNAME', env_value)
     original_values = dict(bot_configuration_service._original_values)
-    original_values['SUPPORT_USERNAME'] = env_value
+    original_values['SUPPORT_TG_USERNAME'] = env_value
     monkeypatch.setattr(bot_configuration_service, '_original_values', original_values)
 
     env_keys = set(bot_configuration_service._env_override_keys)
-    env_keys.add('SUPPORT_USERNAME')
+    env_keys.add('SUPPORT_TG_USERNAME')
     monkeypatch.setattr(bot_configuration_service, '_env_override_keys', env_keys)
     monkeypatch.setattr(bot_configuration_service, '_overrides_raw', {})
 
@@ -93,7 +93,7 @@ async def test_initialize_skips_db_value_for_env_override(monkeypatch):
             return self
 
         def all(self):
-            return [SimpleNamespace(key='SUPPORT_USERNAME', value='db_support')]
+            return [SimpleNamespace(key='SUPPORT_TG_USERNAME', value='db_support')]
 
     class DummySession:
         async def __aenter__(self):
@@ -121,9 +121,9 @@ async def test_initialize_skips_db_value_for_env_override(monkeypatch):
 
     await bot_configuration_service.initialize()
 
-    assert env_value == settings.SUPPORT_USERNAME
-    assert 'SUPPORT_USERNAME' not in bot_configuration_service._overrides_raw
-    assert not bot_configuration_service.has_override('SUPPORT_USERNAME')
+    assert env_value == settings.SUPPORT_TG_USERNAME
+    assert 'SUPPORT_TG_USERNAME' not in bot_configuration_service._overrides_raw
+    assert not bot_configuration_service.has_override('SUPPORT_TG_USERNAME')
 
 
 async def test_set_value_applies_without_env_override(monkeypatch):

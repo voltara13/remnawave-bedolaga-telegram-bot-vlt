@@ -25,6 +25,7 @@ from app.database.crud.rules import (
 )
 from app.database.models import ServiceRule
 from app.services.faq_service import FaqService
+from app.services.personal_data_consent_service import PersonalDataConsentService
 from app.services.privacy_policy_service import PrivacyPolicyService
 from app.services.public_offer_service import PublicOfferService
 
@@ -204,6 +205,60 @@ async def update_privacy_policy(
         created_at=policy.created_at,
         updated_at=policy.updated_at,
         splitter=PrivacyPolicyService.split_content_into_pages,
+    )
+
+
+@router.get('/personal-data-consent', response_model=RichTextPageResponse)
+async def get_personal_data_consent(
+    _: object = Security(require_api_token),
+    db: AsyncSession = Depends(get_db_session),
+    language: str = Query('ru', min_length=2, max_length=10),
+    fallback: bool = Query(True),
+    include_disabled: bool = Query(True),
+) -> RichTextPageResponse:
+    requested_lang = PersonalDataConsentService.normalize_language(language)
+    consent = await PersonalDataConsentService.get_consent(db, requested_lang, fallback=fallback)
+
+    if not consent:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, 'Personal data consent not found')
+
+    if not include_disabled and not consent.is_enabled:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, 'Personal data consent disabled')
+
+    return _serialize_rich_page(
+        requested_language=requested_lang,
+        language=consent.language,
+        is_enabled=consent.is_enabled,
+        content=consent.content or '',
+        created_at=consent.created_at,
+        updated_at=consent.updated_at,
+        splitter=PersonalDataConsentService.split_content_into_pages,
+    )
+
+
+@router.put('/personal-data-consent', response_model=RichTextPageResponse)
+async def update_personal_data_consent(
+    payload: RichTextPageUpdateRequest,
+    _: object = Security(require_api_token),
+    db: AsyncSession = Depends(get_db_session),
+) -> RichTextPageResponse:
+    lang = PersonalDataConsentService.normalize_language(payload.language)
+    consent = await PersonalDataConsentService.save_consent(db, lang, payload.content)
+
+    if payload.is_enabled is not None:
+        consent = await PersonalDataConsentService.set_enabled(db, lang, payload.is_enabled)
+
+    refreshed = await PersonalDataConsentService.get_consent(db, lang, fallback=False)
+    consent = refreshed or consent
+
+    return _serialize_rich_page(
+        requested_language=lang,
+        language=consent.language,
+        is_enabled=consent.is_enabled,
+        content=consent.content or '',
+        created_at=consent.created_at,
+        updated_at=consent.updated_at,
+        splitter=PersonalDataConsentService.split_content_into_pages,
     )
 
 

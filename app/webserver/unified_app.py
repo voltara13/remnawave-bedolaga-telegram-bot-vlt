@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.cabinet.routes import router as cabinet_router
+from app.cabinet.routes.info import public_router as public_info_router
 from app.config import settings
 from app.services.disposable_email_service import disposable_email_service
 from app.services.payment_service import PaymentService
@@ -83,6 +84,7 @@ def _create_base_app() -> FastAPI:
                     allow_methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
                     allow_headers=['Authorization', 'Content-Type', 'X-CSRF-Token', 'X-Telegram-Init-Data'],
                 )
+            app.include_router(public_info_router)
             app.include_router(cabinet_router)
 
     _attach_docs_alias(app, app.docs_url)

@@ -19,6 +19,7 @@ from ..dependencies import get_cabinet_db, get_current_cabinet_user
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix='/info', tags=['Cabinet Info'])
+public_router = APIRouter(tags=['Public Info'], redirect_slashes=False)
 
 _LANGUAGE_META: dict[str, tuple[str, str]] = {
     'ru': ('Русский', '🇷🇺'),
@@ -106,6 +107,26 @@ class SupportConfigResponse(BaseModel):
 
 
 # ============ Routes ============
+
+
+async def _build_personal_data_consent_response(
+    db: AsyncSession,
+    language: str,
+) -> PersonalDataConsentResponse:
+    requested_lang = PersonalDataConsentService.normalize_language(language)
+    consent = await PersonalDataConsentService.get_consent(db, requested_lang, fallback=True)
+
+    if consent and consent.content:
+        updated_at = consent.updated_at.isoformat() if consent.updated_at else None
+        return PersonalDataConsentResponse(content=consent.content, updated_at=updated_at)
+
+    return PersonalDataConsentResponse(
+        content="""# Согласие на обработку персональных данных
+
+Настоящим я даю согласие на обработку моих персональных данных в соответствии с Федеральным законом № 152-ФЗ «О персональных данных».
+""",
+        updated_at=None,
+    )
 
 
 @router.get('/faq', response_model=list[FaqPageResponse])
@@ -235,20 +256,16 @@ async def get_personal_data_consent(
     db: AsyncSession = Depends(get_cabinet_db),
 ):
     """Get personal data processing consent."""
-    requested_lang = PersonalDataConsentService.normalize_language(language)
-    consent = await PersonalDataConsentService.get_consent(db, requested_lang, fallback=True)
+    return await _build_personal_data_consent_response(db, language)
 
-    if consent and consent.content:
-        updated_at = consent.updated_at.isoformat() if consent.updated_at else None
-        return PersonalDataConsentResponse(content=consent.content, updated_at=updated_at)
 
-    return PersonalDataConsentResponse(
-        content="""# Согласие на обработку персональных данных
-
-Настоящим я даю согласие на обработку моих персональных данных в соответствии с Федеральным законом № 152-ФЗ «О персональных данных».
-""",
-        updated_at=None,
-    )
+@public_router.get('/personal-data-consent', response_model=PersonalDataConsentResponse)
+async def get_public_personal_data_consent(
+    language: str = Query('ru', min_length=2, max_length=10),
+    db: AsyncSession = Depends(get_cabinet_db),
+):
+    """Public alias for personal data processing consent."""
+    return await _build_personal_data_consent_response(db, language)
 
 
 @router.get('/service', response_model=ServiceInfoResponse)

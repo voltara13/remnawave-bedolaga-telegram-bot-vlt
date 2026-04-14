@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # Cabinet (Personal Account) routes
 from app.cabinet.routes import router as cabinet_router
+from app.cabinet.routes.info import public_router as public_info_router
 from app.config import settings
 from app.webapi.docs import add_redoc_endpoint
 
@@ -279,6 +280,7 @@ def create_web_api_app() -> FastAPI:
 
     # Cabinet (Personal Account) routes
     if settings.is_cabinet_enabled():
+        app.include_router(public_info_router)
         app.include_router(cabinet_router)
 
     return app

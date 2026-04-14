@@ -16,6 +16,8 @@ logger = structlog.get_logger(__name__)
 class PersonalDataConsentService:
     """Helpers for managing the personal data consent text and visibility."""
 
+    MAX_PAGE_LENGTH = 3500
+
     @staticmethod
     def _normalize_language(language: str) -> str:
         base_language = language or settings.DEFAULT_LANGUAGE or 'ru'
@@ -66,3 +68,59 @@ class PersonalDataConsentService:
     ) -> PersonalDataConsent:
         lang = cls._normalize_language(language)
         return await set_personal_data_consent_enabled(db, lang, enabled)
+
+    @staticmethod
+    def split_content_into_pages(
+        content: str,
+        *,
+        max_length: int = None,
+    ) -> list[str]:
+        if not content:
+            return []
+
+        normalized = content.replace('\r\n', '\n').strip()
+        if not normalized:
+            return []
+
+        max_len = max_length or PersonalDataConsentService.MAX_PAGE_LENGTH
+
+        if len(normalized) <= max_len:
+            return [normalized]
+
+        paragraphs = [paragraph.strip() for paragraph in normalized.split('\n\n') if paragraph.strip()]
+
+        pages: list[str] = []
+        current = ''
+
+        def flush_current() -> None:
+            nonlocal current
+            if current:
+                pages.append(current.strip())
+                current = ''
+
+        for paragraph in paragraphs:
+            candidate = f'{current}\n\n{paragraph}'.strip() if current else paragraph
+            if len(candidate) <= max_len:
+                current = candidate
+                continue
+
+            flush_current()
+
+            if len(paragraph) <= max_len:
+                current = paragraph
+                continue
+
+            start_index = 0
+            while start_index < len(paragraph):
+                chunk = paragraph[start_index : start_index + max_len]
+                pages.append(chunk.strip())
+                start_index += max_len
+
+            current = ''
+
+        flush_current()
+
+        if not pages:
+            return [normalized[:max_len]]
+
+        return pages

@@ -1,3 +1,4 @@
+from html import escape as html_escape
 from urllib.parse import quote, urlparse, urlunparse
 
 import structlog
@@ -56,6 +57,35 @@ def get_display_subscription_link(subscription: Subscription | None) -> str | No
         return crypto_link or base_link
 
     return base_link
+
+
+def get_cabinet_web_url() -> str | None:
+    """Return configured cabinet URL for regular web links."""
+    cabinet_url = (getattr(settings, 'CABINET_URL', '') or '').strip().rstrip('/')
+    default_url = getattr(settings, '_CABINET_URL_DEFAULT', 'https://example.com/cabinet')
+    if not cabinet_url or cabinet_url == default_url:
+        return None
+    return cabinet_url
+
+
+def get_cabinet_web_link_block(texts=None) -> str:
+    """Return an HTML block with a regular browser link to the cabinet."""
+    cabinet_url = get_cabinet_web_url()
+    if not cabinet_url:
+        return ''
+
+    label = (
+        texts.t('CABINET_WEB_LINK_LABEL', 'Личный кабинет')
+        if texts is not None and hasattr(texts, 't')
+        else 'Личный кабинет'
+    )
+    link_text = (
+        texts.t('CABINET_WEB_LINK_TEXT', 'открыть в браузере')
+        if texts is not None and hasattr(texts, 't')
+        else 'открыть в браузере'
+    )
+    safe_url = html_escape(cabinet_url, quote=True)
+    return f'🌐 <b>{html_escape(label)}:</b> <a href="{safe_url}">{html_escape(link_text)}</a>'
 
 
 def get_happ_cryptolink_redirect_link(subscription_link: str | None) -> str | None:

@@ -111,6 +111,7 @@ from app.utils.pricing_utils import (
     format_period_description,
 )
 from app.utils.subscription_utils import (
+    get_cabinet_web_link_block,
     get_display_subscription_link,
     resolve_simple_subscription_device_limit,
 )
@@ -489,6 +490,10 @@ async def show_subscription_info(callback: types.CallbackQuery, db_user: User, d
         devices_used=devices_used_str,
         device_limit=device_limit_display,
     )
+
+    cabinet_link_block = get_cabinet_web_link_block(texts)
+    if cabinet_link_block:
+        message += f'\n\n{cabinet_link_block}'
 
     if show_devices and devices_list:
         message += '\n\n' + texts.t(

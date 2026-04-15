@@ -58,6 +58,7 @@ from app.utils.promo_offer import (
     build_promo_offer_hint,
     build_test_access_hint,
 )
+from app.utils.subscription_utils import get_cabinet_web_link_block
 from app.utils.timezone import format_local_datetime
 from app.utils.user_utils import generate_unique_referral_code
 
@@ -2266,6 +2267,10 @@ async def get_main_menu_text(user, texts, db: AsyncSession):
     )
 
     action_prompt = texts.t('MAIN_MENU_ACTION_PROMPT', 'Выберите действие:')
+
+    cabinet_link_block = get_cabinet_web_link_block(texts)
+    if cabinet_link_block:
+        base_text = _insert_random_message(base_text, cabinet_link_block, action_prompt)
 
     info_sections: list[str] = []
 

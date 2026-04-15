@@ -40,6 +40,7 @@ from app.utils.promo_offer import (
     build_promo_offer_hint,
     build_test_access_hint,
 )
+from app.utils.subscription_utils import get_cabinet_web_link_block
 from app.utils.timezone import format_local_datetime
 
 
@@ -1259,24 +1260,33 @@ async def _get_multi_tariff_status(user, texts, db: AsyncSession) -> tuple[str, 
 async def get_main_menu_text(user, texts, db: AsyncSession):
     from app.config import settings
 
+    def _insert_account_blocks(base_text: str, *blocks: str) -> str:
+        visible_blocks = [block.strip() for block in blocks if block and block.strip()]
+        if not visible_blocks:
+            return base_text
+        action_prompt_text = texts.t('MAIN_MENU_ACTION_PROMPT', 'Выберите действие:')
+        account_block = '\n'.join(visible_blocks)
+        if action_prompt_text in base_text:
+            return base_text.replace(action_prompt_text, f'{account_block}\n\n{action_prompt_text}', 1)
+        return f'{base_text}\n\n{account_block}'
+
     # Multi-tariff: show summary of all subscriptions
     if settings.is_multi_tariff_enabled():
         subscriptions_status, tariff_info_block = await _get_multi_tariff_status(user, texts, db)
+        cabinet_link_block = get_cabinet_web_link_block(texts)
 
         base_text = texts.MAIN_MENU.format(
             user_name=html.escape(user.full_name or ''),
             subscription_status=subscriptions_status,
         )
 
-        if tariff_info_block:
-            action_prompt_text = texts.t('MAIN_MENU_ACTION_PROMPT', 'Выберите действие:')
-            if action_prompt_text in base_text:
-                base_text = base_text.replace(action_prompt_text, f'{tariff_info_block}\n\n{action_prompt_text}')
+        base_text = _insert_account_blocks(base_text, tariff_info_block, cabinet_link_block)
     else:
         # Single-tariff mode: legacy behavior
         tariff = None
         is_daily_tariff = False
         tariff_info_block = ''
+        cabinet_link_block = get_cabinet_web_link_block(texts)
 
         subscription = getattr(user, 'subscription', None)
         if settings.is_tariffs_mode() and subscription and subscription.tariff_id:
@@ -1295,10 +1305,7 @@ async def get_main_menu_text(user, texts, db: AsyncSession):
             subscription_status=_get_subscription_status(user, texts, is_daily_tariff),
         )
 
-        if tariff_info_block:
-            action_prompt_text = texts.t('MAIN_MENU_ACTION_PROMPT', 'Выберите действие:')
-            if action_prompt_text in base_text:
-                base_text = base_text.replace(action_prompt_text, f'{tariff_info_block}\n\n{action_prompt_text}')
+        base_text = _insert_account_blocks(base_text, tariff_info_block, cabinet_link_block)
 
     action_prompt = texts.t('MAIN_MENU_ACTION_PROMPT', 'Выберите действие:')
 

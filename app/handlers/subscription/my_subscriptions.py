@@ -21,6 +21,7 @@ from app.database.crud.subscription import (
 from app.database.models import Subscription, SubscriptionStatus, User
 from app.localization.texts import get_texts
 from app.services.subscription_service import SubscriptionService
+from app.utils.subscription_utils import get_cabinet_web_link_block
 
 
 logger = structlog.get_logger(__name__)
@@ -163,6 +164,9 @@ async def show_my_subscriptions(
         for idx, sub in enumerate(subscriptions, 1):
             lines.append(_format_subscription_line(sub, idx))
             lines.append('')  # empty line between subscriptions
+        cabinet_link_block = get_cabinet_web_link_block(get_texts(db_user.language))
+        if cabinet_link_block:
+            lines.append(cabinet_link_block)
         text = '\n'.join(lines)
         keyboard = _build_subscriptions_keyboard(subscriptions, db_user.language)
 
@@ -209,6 +213,10 @@ async def show_subscription_detail(
         f'📱 Устройства: {subscription.device_limit}\n'
         f'📅 До: {end_date}\n'
     )
+
+    cabinet_link_block = get_cabinet_web_link_block(get_texts(db_user.language))
+    if cabinet_link_block:
+        text += f'\n{cabinet_link_block}\n'
 
     if subscription.subscription_url and not settings.should_hide_subscription_link():
         text += f'\n🔗 <code>{subscription.subscription_url}</code>'

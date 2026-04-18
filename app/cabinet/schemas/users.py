@@ -723,6 +723,23 @@ class ResetSubscriptionResponse(BaseModel):
     panel_error: str | None = None
 
 
+class DeleteSubscriptionRequest(BaseModel):
+    """Request to delete a specific subscription."""
+
+    deactivate_in_panel: bool = Field(default=True, description='Also deactivate in Remnawave panel')
+    reason: str | None = Field(None, max_length=500, description='Reason for subscription deletion')
+
+
+class DeleteSubscriptionResponse(BaseModel):
+    """Response after single subscription deletion."""
+
+    success: bool
+    message: str
+    subscription_deleted: bool = False
+    panel_deactivated: bool = False
+    panel_error: str | None = None
+
+
 class DisableUserRequest(BaseModel):
     """Request to disable user."""
 

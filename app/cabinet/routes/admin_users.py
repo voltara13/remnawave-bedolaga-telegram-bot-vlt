@@ -52,6 +52,7 @@ from ..schemas.users import (
     AssignReferrerRequest,
     AssignReferrerResponse,
     DeleteDeviceResponse,
+    DeleteSubscriptionResponse,
     DeleteUserRequest,
     DeleteUserResponse,
     DeviceInfo,
@@ -2439,6 +2440,81 @@ async def reset_user_subscription(
         success=True,
         message='Subscription reset successfully',
         subscription_deleted=subscription_deleted,
+        panel_deactivated=panel_deactivated,
+        panel_error=panel_error,
+    )
+
+
+@router.delete('/{user_id}/subscriptions/{subscription_id}', response_model=DeleteSubscriptionResponse)
+async def delete_user_subscription(
+    user_id: int,
+    subscription_id: int,
+    deactivate_in_panel: bool = Query(True, description='Also deactivate in Remnawave panel'),
+    reason: str | None = Query(None, max_length=500, description='Reason for subscription deletion'),
+    admin: User = Depends(require_permission('users:subscription')),
+    db: AsyncSession = Depends(get_cabinet_db),
+):
+    """
+    Delete a specific user subscription.
+
+    Actions:
+    - Deactivate subscription in Remnawave panel (optional)
+    - Remove subscription and related records from bot database
+    """
+    user = await get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='User not found',
+        )
+
+    subs = getattr(user, 'subscriptions', None) or []
+    subscription = next((s for s in subs if s.id == subscription_id), None)
+    if not subscription:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Subscription {subscription_id} not found for this user',
+        )
+
+    panel_deactivated = False
+    panel_error: str | None = None
+
+    if deactivate_in_panel:
+        try:
+            from app.services.subscription_service import SubscriptionService
+
+            subscription_service = SubscriptionService()
+            sub_uuid = (
+                subscription.remnawave_uuid if settings.is_multi_tariff_enabled() else user.remnawave_uuid
+            )
+            if sub_uuid:
+                panel_deactivated = await subscription_service.disable_remnawave_user(sub_uuid)
+        except Exception as e:
+            panel_error = 'Ошибка обработки пользователя в Remnawave'
+            logger.warning('Failed to disable Remnawave user during subscription delete', error=e)
+
+    from sqlalchemy import delete
+
+    await db.execute(delete(TrafficPurchase).where(TrafficPurchase.subscription_id == subscription.id))
+    await db.execute(delete(SubscriptionServer).where(SubscriptionServer.subscription_id == subscription.id))
+    await db.execute(delete(Subscription).where(Subscription.id == subscription.id))
+
+    user.updated_at = datetime.now(UTC)
+    await db.commit()
+
+    reason_text = f' (reason: {reason})' if reason else ''
+    logger.info(
+        'Admin deleted subscription for user',
+        admin_id=admin.id,
+        user_id=user_id,
+        subscription_id=subscription_id,
+        reason_text=reason_text,
+    )
+
+    return DeleteSubscriptionResponse(
+        success=True,
+        message='Subscription deleted successfully',
+        subscription_deleted=True,
         panel_deactivated=panel_deactivated,
         panel_error=panel_error,
     )

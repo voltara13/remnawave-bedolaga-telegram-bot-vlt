@@ -4,9 +4,9 @@ services:
     container_name: remnawave_bot_db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-remnawave_bot}
-      POSTGRES_USER: ${POSTGRES_USER:-remnawave_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_password_123}
+      POSTGRES_DB: ${POSTGRES_DB:?set in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
       POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -16,7 +16,7 @@ services:
       test:
         [
           'CMD-SHELL',
-          'pg_isready -U ${POSTGRES_USER:-remnawave_user} -d ${POSTGRES_DB:-remnawave_bot}',
+          'pg_isready -U ${POSTGRES_USER:?set in .env} -d ${POSTGRES_DB:?set in .env}',
         ]
       interval: 30s
       timeout: 5s
@@ -27,13 +27,13 @@ services:
     image: redis:7-alpine
     container_name: remnawave_bot_redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?set in .env} --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     networks:
       - bot_network
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      test: ['CMD-SHELL', 'redis-cli -a ${REDIS_PASSWORD:?set in .env} ping']
       interval: 30s
       timeout: 10s
       retries: 3
@@ -55,11 +55,11 @@ services:
       DATABASE_MODE: 'auto'
       POSTGRES_HOST: 'postgres'
       POSTGRES_PORT: '5432'
-      POSTGRES_DB: '${POSTGRES_DB:-remnawave_bot}'
-      POSTGRES_USER: '${POSTGRES_USER:-remnawave_user}'
-      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD:-secure_password_123}'
+      POSTGRES_DB: '${POSTGRES_DB:?set in .env}'
+      POSTGRES_USER: '${POSTGRES_USER:?set in .env}'
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD:?set in .env}'
 
-      REDIS_URL: 'redis://redis:6379/0'
+      REDIS_URL: 'redis://:${REDIS_PASSWORD:?set in .env}@redis:6379/0'
 
       TZ: 'Europe/Moscow'
       LOCALES_PATH: '${LOCALES_PATH:-/app/locales}'
@@ -76,10 +76,14 @@ services:
       - ./uploads:/app/uploads:rw
       # Логотип для сообщений
       - ./vpn_logo.png:/app/vpn_logo.png:ro
-    ports:
-      - '${WEB_API_PORT:-8080}:8080'
+    expose:
+      - '8080'
     networks:
       - bot_network
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
     healthcheck:
       test:
         [
@@ -99,6 +103,7 @@ volumes:
 
 networks:
   bot_network:
+    name: remnawave_net
     driver: bridge
     ipam:
       config:

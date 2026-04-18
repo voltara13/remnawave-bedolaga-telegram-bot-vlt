@@ -1116,6 +1116,18 @@ class Tariff(Base):
         prices = self.period_prices or {}
         return sorted([int(p) for p in prices.keys()])
 
+    def get_effective_price(self, period_days: int) -> int | None:
+        """Возвращает цену в копейках для периода с учётом суточных тарифов.
+
+        Для суточных тарифов цена = daily_price_kopeks * period_days.
+        Для обычных — фиксированная цена из period_prices.
+        """
+        if self.is_daily:
+            if not self.daily_price_kopeks or period_days <= 0:
+                return None
+            return self.daily_price_kopeks * period_days
+        return self.get_price_for_period(period_days)
+
     def get_shortest_period(self) -> int | None:
         """Возвращает минимальный доступный период в днях (для автопродления)."""
         periods = self.get_available_periods()

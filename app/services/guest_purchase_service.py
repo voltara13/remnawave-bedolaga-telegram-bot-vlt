@@ -95,25 +95,32 @@ async def validate_and_calculate(
     if tariff is None or not tariff.is_active:
         raise GuestPurchaseError('Tariff not found or inactive')
 
-    # Check period against landing-level override (if set)
-    allowed_periods = landing.allowed_periods or {}
-    if allowed_periods:
-        tariff_periods_override = allowed_periods.get(str(tariff_id))
-        if tariff_periods_override is not None:
-            if period_days not in tariff_periods_override:
-                raise GuestPurchaseError('Period is not available for this tariff on this landing page')
+    # Check period against landing-level override (if set).
+    # Daily tariffs: guest picks how many days to prepay (bounded 1..365);
+    # further days past the prepaid window are auto-charged from balance by
+    # daily_subscription_service.
+    if tariff.is_daily:
+        if period_days < 1 or period_days > 365:
+            raise GuestPurchaseError('Period is not available for this tariff')
+    else:
+        allowed_periods = landing.allowed_periods or {}
+        if allowed_periods:
+            tariff_periods_override = allowed_periods.get(str(tariff_id))
+            if tariff_periods_override is not None:
+                if period_days not in tariff_periods_override:
+                    raise GuestPurchaseError('Period is not available for this tariff on this landing page')
+            else:
+                # No override for this tariff -> all tariff periods allowed
+                available = tariff.get_available_periods()
+                if period_days not in available:
+                    raise GuestPurchaseError('Period is not available for this tariff')
         else:
-            # No override for this tariff -> all tariff periods allowed
+            # No overrides at all -> use tariff's own periods
             available = tariff.get_available_periods()
             if period_days not in available:
                 raise GuestPurchaseError('Period is not available for this tariff')
-    else:
-        # No overrides at all -> use tariff's own periods
-        available = tariff.get_available_periods()
-        if period_days not in available:
-            raise GuestPurchaseError('Period is not available for this tariff')
 
-    price_kopeks = tariff.get_price_for_period(period_days)
+    price_kopeks = tariff.get_effective_price(period_days)
     if price_kopeks is None:
         raise GuestPurchaseError('Price is not configured for this period')
 
@@ -334,7 +341,7 @@ async def fulfill_purchase(
         # or promo codes may have altered the price at purchase time. The amount
         # was validated server-side in validate_and_calculate() and the payment
         # provider confirmed the charged amount.
-        expected_price = tariff.get_price_for_period(purchase.period_days)
+        expected_price = tariff.get_effective_price(purchase.period_days)
         if expected_price is None:
             logger.error(
                 'Price no longer configured for period — aborting fulfillment',

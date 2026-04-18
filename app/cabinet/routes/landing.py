@@ -58,6 +58,13 @@ class LandingTariff(BaseModel):
     device_limit: int
     tier_level: int
     periods: list[LandingTariffPeriod]
+    # Daily tariff fields: when is_daily=True, `periods` is empty and the UI
+    # shows a dedicated "Суточный" entry in the period selector priced at
+    # daily_price_kopeks (discount already applied) per 1 day of subscription.
+    is_daily: bool = False
+    daily_price_kopeks: int | None = None
+    daily_original_price_kopeks: int | None = None
+    daily_discount_percent: int | None = None
 
 
 class LandingPaymentMethodSubOption(BaseModel):
@@ -318,7 +325,43 @@ async def _load_landing_tariffs(
     landing_tariffs = []
 
     for tariff in tariffs:
-        # Determine which periods to show
+        if tariff.is_daily:
+            # Daily tariffs have no period-based prices. They appear as a
+            # dedicated "Суточный" entry in the frontend's period selector.
+            if not tariff.daily_price_kopeks:
+                continue
+
+            daily_price = tariff.daily_price_kopeks
+            daily_original: int | None = None
+            daily_discount_pct: int | None = None
+
+            if discount:
+                overrides = landing.discount_overrides or {}
+                tariff_override = overrides.get(str(tariff.id))
+                effective_discount = tariff_override if tariff_override is not None else discount.percent
+                daily_original = daily_price
+                daily_discount_pct = effective_discount
+                from app.services.pricing_engine import PricingEngine
+
+                daily_price = max(1, PricingEngine.apply_discount(daily_price, effective_discount))
+
+            landing_tariffs.append(
+                LandingTariff(
+                    id=tariff.id,
+                    name=tariff.name,
+                    description=tariff.description,
+                    traffic_limit_gb=tariff.traffic_limit_gb,
+                    device_limit=tariff.device_limit,
+                    tier_level=tariff.tier_level,
+                    periods=[],
+                    is_daily=True,
+                    daily_price_kopeks=daily_price,
+                    daily_original_price_kopeks=daily_original,
+                    daily_discount_percent=daily_discount_pct,
+                )
+            )
+            continue
+
         tariff_period_override = allowed_periods.get(str(tariff.id))
         if tariff_period_override is not None:
             period_days_list = sorted(tariff_period_override)
@@ -336,7 +379,6 @@ async def _load_landing_tariffs(
             effective_discount = None
 
             if discount:
-                # Per-tariff override takes priority (read from landing model, not response DTO)
                 overrides = landing.discount_overrides or {}
                 tariff_override = overrides.get(str(tariff.id))
                 effective_discount = tariff_override if tariff_override is not None else discount.percent
@@ -370,6 +412,7 @@ async def _load_landing_tariffs(
                 device_limit=tariff.device_limit,
                 tier_level=tariff.tier_level,
                 periods=periods,
+                is_daily=False,
             )
         )
 

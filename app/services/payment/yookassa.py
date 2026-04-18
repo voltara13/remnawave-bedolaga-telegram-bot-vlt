@@ -1353,6 +1353,27 @@ class YooKassaPaymentMixin:
         try:
             amount_rubles = payment.amount_kopeks / 100
             telegram_user_id = user.telegram_id if user else None
+
+            # Prefer contacts captured at payment time (cabinet form) over user profile,
+            # so receipts go where the buyer asked at checkout.
+            import json
+
+            payment_metadata: dict[str, Any] = {}
+            raw_metadata = getattr(payment, 'metadata_json', None)
+            if isinstance(raw_metadata, dict):
+                payment_metadata = raw_metadata
+            elif isinstance(raw_metadata, str) and raw_metadata:
+                try:
+                    payment_metadata = json.loads(raw_metadata)
+                except (ValueError, TypeError):
+                    payment_metadata = {}
+
+            delivery_email = payment_metadata.get('receipt_email') or (user.email if user else None)
+            delivery_language = (
+                payment_metadata.get('receipt_language')
+                or (user.language if user else None)
+            )
+
             # Формируем описание из настроек (включает сумму и ID пользователя)
             receipt_name = settings.get_balance_payment_description(
                 payment.amount_kopeks, telegram_user_id=telegram_user_id
@@ -1365,8 +1386,8 @@ class YooKassaPaymentMixin:
                 payment_id=payment.yookassa_payment_id,
                 telegram_user_id=telegram_user_id,
                 amount_kopeks=payment.amount_kopeks,
-                receipt_delivery_email=user.email if user else None,
-                receipt_delivery_language=user.language if user else None,
+                receipt_delivery_email=delivery_email,
+                receipt_delivery_language=delivery_language,
             )
 
             if receipt_uuid:
@@ -1396,8 +1417,8 @@ class YooKassaPaymentMixin:
                         receipt_url=receipt_url,
                         receipt_uuid=receipt_uuid,
                         telegram_id=user.telegram_id if user else None,
-                        email=user.email if user else None,
-                        language=user.language if user else None,
+                        email=delivery_email,
+                        language=delivery_language,
                         bot=getattr(self, 'bot', None),
                     )
             # При временной недоступности чек добавляется в очередь автоматически

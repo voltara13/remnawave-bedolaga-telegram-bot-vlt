@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class BalanceResponse(BaseModel):
@@ -65,6 +65,7 @@ class TopUpRequest(BaseModel):
     amount_kopeks: int = Field(..., ge=1000, le=2_000_000_000, description='Amount in kopeks (min 10 rubles)')
     payment_method: str = Field(..., description='Payment method ID')
     payment_option: str | None = Field(None, description='Payment option (e.g. Platega method code)')
+    email: EmailStr = Field(..., description='Email for fiscal receipt')
 
 
 class TopUpResponse(BaseModel):

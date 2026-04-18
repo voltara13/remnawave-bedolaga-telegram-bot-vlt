@@ -339,6 +339,8 @@ async def create_topup(
             detail=f'Maximum amount is {method.max_amount_kopeks / 100:.2f} RUB',
         )
 
+    receipt_email = request.email.strip().lower()
+
     amount_rubles = request.amount_kopeks / 100
     payment_url = None
     payment_id = None
@@ -354,6 +356,8 @@ async def create_topup(
                 'user_username': user.username or '',
                 'purpose': 'balance_topup',
                 'source': 'cabinet',
+                'receipt_email': receipt_email,
+                'receipt_language': getattr(user, 'language', None) or settings.DEFAULT_LANGUAGE,
             }
 
             # Use payment_option to select card or sbp (default: card)
@@ -368,6 +372,7 @@ async def create_topup(
                     user_id=user.id,
                     amount_kopeks=request.amount_kopeks,
                     description=description,
+                    receipt_email=receipt_email,
                     metadata=yookassa_metadata,
                     return_url=cabinet_return_url,
                 )
@@ -377,6 +382,7 @@ async def create_topup(
                     user_id=user.id,
                     amount_kopeks=request.amount_kopeks,
                     description=description,
+                    receipt_email=receipt_email,
                     metadata=yookassa_metadata,
                     return_url=cabinet_return_url,
                 )
@@ -579,6 +585,7 @@ async def create_topup(
                 ),
                 language=getattr(user, 'language', None) or settings.DEFAULT_LANGUAGE,
                 payment_method=option,
+                payer_email=receipt_email,
             )
 
             if result:
@@ -650,6 +657,7 @@ async def create_topup(
                     request.amount_kopeks, telegram_user_id=user.telegram_id, user_db_id=user.id
                 ),
                 telegram_id=user.telegram_id,
+                email=receipt_email,
                 language=getattr(user, 'language', None) or settings.DEFAULT_LANGUAGE,
                 return_url=cabinet_success_url,
                 failed_url=cabinet_failed_url,
@@ -679,6 +687,7 @@ async def create_topup(
                 description=settings.get_balance_payment_description(
                     request.amount_kopeks, telegram_user_id=user.telegram_id, user_db_id=user.id
                 ),
+                email=receipt_email,
                 language=getattr(user, 'language', None) or settings.DEFAULT_LANGUAGE,
             )
 
@@ -711,7 +720,7 @@ async def create_topup(
                 description=settings.get_balance_payment_description(
                     request.amount_kopeks, telegram_user_id=user.telegram_id, user_db_id=user.id
                 ),
-                email=getattr(user, 'email', None),
+                email=receipt_email,
                 language=getattr(user, 'language', None) or settings.DEFAULT_LANGUAGE,
                 payment_system_id=ps_id,
             )
@@ -740,6 +749,7 @@ async def create_topup(
                 description=settings.get_balance_payment_description(
                     request.amount_kopeks, telegram_user_id=user.telegram_id, user_db_id=user.id
                 ),
+                email=receipt_email,
                 language=getattr(user, 'language', None) or settings.DEFAULT_LANGUAGE,
                 success_url=cabinet_success_url,
                 fail_url=cabinet_failed_url,
@@ -780,7 +790,7 @@ async def create_topup(
                 description=settings.get_balance_payment_description(
                     request.amount_kopeks, telegram_user_id=user.telegram_id, user_db_id=user.id
                 ),
-                email=getattr(user, 'email', None),
+                email=receipt_email,
                 language=getattr(user, 'language', None) or settings.DEFAULT_LANGUAGE,
                 return_url=cabinet_success_url,
             )

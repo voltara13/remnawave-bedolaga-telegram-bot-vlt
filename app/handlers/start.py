@@ -1147,19 +1147,58 @@ async def _show_privacy_policy_after_rules(
         privacy_policy_text = policy.content
         logger.info('🔒 Используется политика конфиденциальности из БД для языка', language=language)
 
+    pages = PrivacyPolicyService.split_content_into_pages(privacy_policy_text)
+    if not pages:
+        logger.info('⚠️ После разбиения политика конфиденциальности пуста, пропускаем показ', language=language)
+        return False
+
+    texts = get_texts(language)
+    header = texts.t(
+        'PRIVACY_POLICY_HEADER',
+        '🛡️ <b>Политика конфиденциальности</b>',
+    )
+
+    formatted_pages: list[str] = []
+    total_pages = len(pages)
+    for index, page_content in enumerate(pages, start=1):
+        page_text = header
+        if page_content:
+            page_text += f'\n\n{page_content}'
+        if total_pages > 1:
+            page_text += f'\n\n<code>{index}/{total_pages}</code>'
+        formatted_pages.append(page_text)
+
     try:
-        await callback.message.edit_text(privacy_policy_text, reply_markup=get_privacy_policy_keyboard(language))
+        try:
+            await callback.message.delete()
+        except Exception:
+            logger.debug(
+                'Не удалось удалить сообщение с правилами перед показом политики конфиденциальности',
+                from_user_id=callback.from_user.id,
+            )
+
+        for index, page_text in enumerate(formatted_pages, start=1):
+            reply_markup = get_privacy_policy_keyboard(language) if index == total_pages else None
+            await callback.message.answer(page_text, reply_markup=reply_markup)
+
         await state.set_state(RegistrationStates.waiting_for_privacy_policy_accept)
-        logger.info('🔒 Политика конфиденциальности отправлена пользователю', from_user_id=callback.from_user.id)
+        logger.info(
+            '🔒 Политика конфиденциальности отправлена пользователю',
+            from_user_id=callback.from_user.id,
+            total_pages=total_pages,
+        )
         return True
     except Exception as e:
         logger.error('Ошибка при показе политики конфиденциальности', error=e, exc_info=True)
         try:
-            await callback.message.answer(privacy_policy_text, reply_markup=get_privacy_policy_keyboard(language))
+            for index, page_text in enumerate(formatted_pages, start=1):
+                reply_markup = get_privacy_policy_keyboard(language) if index == total_pages else None
+                await callback.message.answer(page_text, reply_markup=reply_markup)
             await state.set_state(RegistrationStates.waiting_for_privacy_policy_accept)
             logger.info(
                 '🔒 Политика конфиденциальности отправлена новым сообщением пользователю',
                 from_user_id=callback.from_user.id,
+                total_pages=total_pages,
             )
             return True
         except Exception as e2:

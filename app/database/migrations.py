@@ -5,7 +5,7 @@ from pathlib import Path
 import structlog
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 
 
 logger = structlog.get_logger(__name__)
@@ -41,6 +41,11 @@ async def _detect_db_state() -> str:
 
 
 _INITIAL_REVISION = '0001'
+_LEGACY_PAYMENT_BRANCH_STAMPS = {
+    '0058': '0061',
+    '0059': '0062',
+    '0060': '0063',
+}
 
 
 async def _bootstrap_fresh_db() -> None:
@@ -62,6 +67,69 @@ async def _bootstrap_fresh_db() -> None:
     logger.info('Свежая БД: все таблицы созданы из моделей')
 
 
+async def _repair_legacy_payment_branch_revision() -> None:
+    """Restamp legacy payment-provider revisions that used conflicting IDs.
+
+    Before the upstream merge on 2026-04-19, payment-provider migrations used
+    revision IDs 0058/0059/0060. Upstream introduced different migrations with
+    the same IDs, which makes Alembic's graph ambiguous after the merge.
+
+    If a database was already stamped with the legacy payment branch, detect it
+    by schema markers and restamp it to the new unique payment branch IDs so the
+    remaining upstream migrations can be applied normally.
+    """
+    from app.database.database import engine
+
+    async with engine.connect() as conn:
+        repair = await conn.run_sync(_detect_legacy_payment_branch_repair)
+
+    if repair is None:
+        return
+
+    current_revision, target_revision = repair
+    logger.warning(
+        'Обнаружена устаревшая платёжная ветка Alembic с конфликтующим revision ID — выполняется repair stamp',
+        current_revision=current_revision,
+        target_revision=target_revision,
+    )
+    await _stamp_alembic_revision(target_revision)
+
+
+def _detect_legacy_payment_branch_repair(sync_conn) -> tuple[str, str] | None:
+    inspector = inspect(sync_conn)
+    if not inspector.has_table('alembic_version'):
+        return None
+
+    current_revisions = list(sync_conn.execute(text('SELECT version_num FROM alembic_version')).scalars())
+    if len(current_revisions) != 1:
+        return None
+
+    current_revision = current_revisions[0]
+    if current_revision not in _LEGACY_PAYMENT_BRANCH_STAMPS:
+        return None
+
+    has_personal_data_consents = inspector.has_table('personal_data_consents')
+    has_paypear_payments = inspector.has_table('paypear_payments')
+    has_rollypay_payments = inspector.has_table('rollypay_payments')
+    has_aurapay_payments = inspector.has_table('aurapay_payments')
+
+    subscription_columns = set()
+    if inspector.has_table('subscriptions'):
+        subscription_columns = {column['name'] for column in inspector.get_columns('subscriptions')}
+    has_subscription_name = 'name' in subscription_columns
+
+    if current_revision == '0058' and has_paypear_payments and not has_personal_data_consents:
+        return current_revision, _LEGACY_PAYMENT_BRANCH_STAMPS[current_revision]
+
+    if current_revision == '0059' and has_rollypay_payments and not has_personal_data_consents:
+        return current_revision, _LEGACY_PAYMENT_BRANCH_STAMPS[current_revision]
+
+    if current_revision == '0060' and has_aurapay_payments and not has_subscription_name:
+        return current_revision, _LEGACY_PAYMENT_BRANCH_STAMPS[current_revision]
+
+    return None
+
+
 async def run_alembic_upgrade() -> None:
     """Run ``alembic upgrade head``, handling fresh and legacy databases."""
     import asyncio
@@ -79,6 +147,8 @@ async def run_alembic_upgrade() -> None:
             'Обнаружена существующая БД без alembic_version — автоматический stamp 0001 (переход с universal_migration)'
         )
         await _stamp_alembic_revision(_INITIAL_REVISION)
+    elif db_state == 'managed':
+        await _repair_legacy_payment_branch_revision()
 
     cfg = _get_alembic_config()
     loop = asyncio.get_running_loop()

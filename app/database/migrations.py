@@ -1,26 +1,58 @@
 """Programmatic Alembic migration runner for bot startup."""
 
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
+import sqlalchemy as sa
 import structlog
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect
 
 
 logger = structlog.get_logger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_ALEMBIC_INI = _PROJECT_ROOT / 'alembic.ini'
+_UPSTREAM_ALEMBIC_INI = _PROJECT_ROOT / 'alembic.ini'
+_CUSTOM_ALEMBIC_INI = _PROJECT_ROOT / 'alembic_custom.ini'
+
+_UPSTREAM_VERSION_TABLE = 'alembic_version'
+_CUSTOM_VERSION_TABLE = 'alembic_version_custom'
+_UPSTREAM_INITIAL_REVISION = '0001'
+_UPSTREAM_BASE_REVISION_BEFORE_SPLIT = '0057'
+_UPSTREAM_PERSONAL_DATA_CONSENTS_REVISION = '0058'
+_UPSTREAM_DROP_INDEX_REVISION = '0059'
+_UPSTREAM_SUBSCRIPTION_NAME_REVISION = '0060'
+_CUSTOM_PAYPEAR_REVISION = 'vlt_0001'
+_CUSTOM_ROLLYPAY_REVISION = 'vlt_0002'
+_CUSTOM_AURAPAY_REVISION = 'vlt_0003'
+
+_CUSTOM_SCHEMA_REVISIONS = (
+    ('aurapay_payments', _CUSTOM_AURAPAY_REVISION),
+    ('rollypay_payments', _CUSTOM_ROLLYPAY_REVISION),
+    ('paypear_payments', _CUSTOM_PAYPEAR_REVISION),
+)
+_SPLIT_TRANSITION_SOURCE_REVISIONS = {'0061', '0062', '0063', '0064'}
+_AMBIGUOUS_SHARED_REVISIONS = {'0058', '0059', '0060'}
 
 
-def _get_alembic_config() -> Config:
+def _get_alembic_config(ini_path: Path) -> Config:
     """Build Alembic Config pointing at the project root."""
     from app.config import settings
 
-    cfg = Config(str(_ALEMBIC_INI))
+    cfg = Config(str(ini_path))
     cfg.set_main_option('sqlalchemy.url', settings.get_database_url())
     return cfg
+
+
+async def _run_alembic_command(cfg: Config, fn: Callable[..., Any], *args: str) -> None:
+    import asyncio
+
+    loop = asyncio.get_running_loop()
+    # run_in_executor offloads to a thread where env.py can safely
+    # call asyncio.run() to create its own event loop.
+    await loop.run_in_executor(None, fn, cfg, *args)
 
 
 async def _detect_db_state() -> str:
@@ -33,31 +65,15 @@ async def _detect_db_state() -> str:
     from app.database.database import engine
 
     async with engine.connect() as conn:
-        has_alembic = await conn.run_sync(lambda sync_conn: inspect(sync_conn).has_table('alembic_version'))
+        has_alembic = await conn.run_sync(lambda sync_conn: inspect(sync_conn).has_table(_UPSTREAM_VERSION_TABLE))
         if has_alembic:
             return 'managed'
         has_users = await conn.run_sync(lambda sync_conn: inspect(sync_conn).has_table('users'))
         return 'legacy' if has_users else 'fresh'
 
 
-_INITIAL_REVISION = '0001'
-_LEGACY_PAYMENT_BRANCH_STAMPS = {
-    '0058': '0061',
-    '0059': '0062',
-    '0060': '0063',
-}
-
-
 async def _bootstrap_fresh_db() -> None:
-    """Bootstrap a fresh database: create all tables from models and stamp at head.
-
-    On a fresh DB, running all migrations sequentially would fail because
-    migration 0001 uses Base.metadata.create_all() which creates ALL tables
-    from the current models.py (including columns/constraints/indexes added
-    by later migrations), and then those later migrations try to re-create
-    the same objects.  Instead, we create the full schema directly and stamp
-    the migration history at HEAD so Alembic considers all migrations applied.
-    """
+    """Bootstrap a fresh database and stamp both migration histories at head."""
     from app.database.database import engine
     from app.database.models import Base
 
@@ -67,107 +83,183 @@ async def _bootstrap_fresh_db() -> None:
     logger.info('Свежая БД: все таблицы созданы из моделей')
 
 
-async def _repair_legacy_payment_branch_revision() -> None:
-    """Restamp legacy payment-provider revisions that used conflicting IDs.
-
-    Before the upstream merge on 2026-04-19, payment-provider migrations used
-    revision IDs 0058/0059/0060. Upstream introduced different migrations with
-    the same IDs, which makes Alembic's graph ambiguous after the merge.
-
-    If a database was already stamped with the legacy payment branch, detect it
-    by schema markers and restamp it to the new unique payment branch IDs so the
-    remaining upstream migrations can be applied normally.
-    """
-    from app.database.database import engine
-
-    async with engine.connect() as conn:
-        repair = await conn.run_sync(_detect_legacy_payment_branch_repair)
-
-    if repair is None:
-        return
-
-    current_revision, target_revision = repair
-    logger.warning(
-        'Обнаружена устаревшая платёжная ветка Alembic с конфликтующим revision ID — выполняется repair stamp',
-        current_revision=current_revision,
-        target_revision=target_revision,
+def _build_version_table(table_name: str) -> sa.Table:
+    return sa.Table(
+        table_name,
+        sa.MetaData(),
+        sa.Column('version_num', sa.String(32), nullable=False, primary_key=True),
     )
-    await _stamp_alembic_revision(target_revision)
 
 
-def _detect_legacy_payment_branch_repair(sync_conn) -> tuple[str, str] | None:
+def _read_version_table_revisions(sync_conn, table_name: str) -> list[str]:
     inspector = inspect(sync_conn)
-    if not inspector.has_table('alembic_version'):
-        return None
+    if not inspector.has_table(table_name):
+        return []
 
-    current_revisions = list(sync_conn.execute(text('SELECT version_num FROM alembic_version')).scalars())
-    if len(current_revisions) != 1:
-        return None
+    version_table = _build_version_table(table_name)
+    return list(sync_conn.execute(sa.select(version_table.c.version_num)).scalars())
 
-    current_revision = current_revisions[0]
-    if current_revision not in _LEGACY_PAYMENT_BRANCH_STAMPS:
-        return None
 
-    has_personal_data_consents = inspector.has_table('personal_data_consents')
-    has_paypear_payments = inspector.has_table('paypear_payments')
-    has_rollypay_payments = inspector.has_table('rollypay_payments')
-    has_aurapay_payments = inspector.has_table('aurapay_payments')
+def _set_version_table_revision(sync_conn, table_name: str, revision: str) -> None:
+    version_table = _build_version_table(table_name)
+    version_table.create(bind=sync_conn, checkfirst=True)
+    sync_conn.execute(sa.delete(version_table))
+    sync_conn.execute(sa.insert(version_table).values(version_num=revision))
 
-    subscription_columns = set()
+
+def _has_index(inspector, table_name: str, index_name: str) -> bool:
+    if not inspector.has_table(table_name):
+        return False
+    return any(index['name'] == index_name for index in inspector.get_indexes(table_name))
+
+
+def _infer_upstream_schema_revision(sync_conn) -> str:
+    inspector = inspect(sync_conn)
+
     if inspector.has_table('subscriptions'):
         subscription_columns = {column['name'] for column in inspector.get_columns('subscriptions')}
-    has_subscription_name = 'name' in subscription_columns
+        if 'name' in subscription_columns:
+            return _UPSTREAM_SUBSCRIPTION_NAME_REVISION
 
-    if current_revision == '0058' and has_paypear_payments and not has_personal_data_consents:
-        return current_revision, _LEGACY_PAYMENT_BRANCH_STAMPS[current_revision]
+    if inspector.has_table('personal_data_consents'):
+        if _has_index(inspector, 'subscriptions', 'uq_subscriptions_user_tariff_active'):
+            return _UPSTREAM_PERSONAL_DATA_CONSENTS_REVISION
+        return _UPSTREAM_DROP_INDEX_REVISION
 
-    if current_revision == '0059' and has_rollypay_payments and not has_personal_data_consents:
-        return current_revision, _LEGACY_PAYMENT_BRANCH_STAMPS[current_revision]
+    return _UPSTREAM_BASE_REVISION_BEFORE_SPLIT
 
-    if current_revision == '0060' and has_aurapay_payments and not has_subscription_name:
-        return current_revision, _LEGACY_PAYMENT_BRANCH_STAMPS[current_revision]
 
+def _infer_custom_schema_revision(sync_conn) -> str | None:
+    inspector = inspect(sync_conn)
+    for table_name, revision in _CUSTOM_SCHEMA_REVISIONS:
+        if inspector.has_table(table_name):
+            return revision
     return None
 
 
-async def run_alembic_upgrade() -> None:
-    """Run ``alembic upgrade head``, handling fresh and legacy databases."""
-    import asyncio
+def _needs_upstream_version_realignment(
+    main_revisions: list[str],
+    inferred_upstream_revision: str,
+    inferred_custom_revision: str | None,
+) -> bool:
+    if not main_revisions:
+        return False
 
+    if len(main_revisions) != 1:
+        return True
+
+    current_revision = main_revisions[0]
+    if current_revision in _SPLIT_TRANSITION_SOURCE_REVISIONS:
+        return True
+
+    if (
+        current_revision in _AMBIGUOUS_SHARED_REVISIONS
+        and inferred_custom_revision is not None
+        and current_revision != inferred_upstream_revision
+    ):
+        return True
+
+    return False
+
+
+def _needs_custom_version_realignment(
+    custom_revisions: list[str],
+    inferred_custom_revision: str | None,
+) -> bool:
+    return inferred_custom_revision is not None and custom_revisions != [inferred_custom_revision]
+
+
+async def _transition_to_split_histories() -> None:
+    """Split old combined migration history into upstream + custom version tables."""
+    from app.database.database import engine
+
+    async with engine.begin() as conn:
+        transition = await conn.run_sync(_transition_to_split_histories_sync)
+
+    if transition is None:
+        return
+
+    logger.warning(
+        'Обнаружена объединённая история Alembic — выполняется переход на split histories',
+        **transition,
+    )
+
+
+def _transition_to_split_histories_sync(sync_conn) -> dict[str, object] | None:
+    inspector = inspect(sync_conn)
+    if not inspector.has_table(_UPSTREAM_VERSION_TABLE):
+        return None
+
+    main_revisions = _read_version_table_revisions(sync_conn, _UPSTREAM_VERSION_TABLE)
+    custom_revisions = _read_version_table_revisions(sync_conn, _CUSTOM_VERSION_TABLE)
+    inferred_upstream_revision = _infer_upstream_schema_revision(sync_conn)
+    inferred_custom_revision = _infer_custom_schema_revision(sync_conn)
+
+    needs_main_realignment = _needs_upstream_version_realignment(
+        main_revisions,
+        inferred_upstream_revision,
+        inferred_custom_revision,
+    )
+    needs_custom_realignment = _needs_custom_version_realignment(
+        custom_revisions,
+        inferred_custom_revision,
+    )
+    if not needs_main_realignment and not needs_custom_realignment:
+        return None
+
+    if needs_main_realignment:
+        _set_version_table_revision(sync_conn, _UPSTREAM_VERSION_TABLE, inferred_upstream_revision)
+
+    if needs_custom_realignment and inferred_custom_revision is not None:
+        _set_version_table_revision(sync_conn, _CUSTOM_VERSION_TABLE, inferred_custom_revision)
+
+    return {
+        'upstream_before': ', '.join(main_revisions) if main_revisions else 'none',
+        'upstream_after': inferred_upstream_revision,
+        'custom_before': ', '.join(custom_revisions) if custom_revisions else 'none',
+        'custom_after': inferred_custom_revision or 'none',
+    }
+
+
+async def run_alembic_upgrade() -> None:
+    """Run upstream and custom Alembic histories with split-version compatibility."""
+    upstream_cfg = _get_alembic_config(_UPSTREAM_ALEMBIC_INI)
+    custom_cfg = _get_alembic_config(_CUSTOM_ALEMBIC_INI)
     db_state = await _detect_db_state()
 
     if db_state == 'fresh':
-        logger.warning('Обнаружена пустая БД — создание схемы из моделей + stamp head')
+        logger.warning('Обнаружена пустая БД — создание схемы из моделей + stamp head для upstream/custom')
         await _bootstrap_fresh_db()
-        await _stamp_alembic_revision('head')
+        await _stamp_alembic_revision(upstream_cfg, 'head')
+        await _stamp_alembic_revision(custom_cfg, 'head')
         return
 
     if db_state == 'legacy':
         logger.warning(
             'Обнаружена существующая БД без alembic_version — автоматический stamp 0001 (переход с universal_migration)'
         )
-        await _stamp_alembic_revision(_INITIAL_REVISION)
-    elif db_state == 'managed':
-        await _repair_legacy_payment_branch_revision()
+        await _stamp_alembic_revision(upstream_cfg, _UPSTREAM_INITIAL_REVISION)
 
-    cfg = _get_alembic_config()
-    loop = asyncio.get_running_loop()
-    # run_in_executor offloads to a thread where env.py can safely
-    # call asyncio.run() to create its own event loop.
-    await loop.run_in_executor(None, command.upgrade, cfg, 'head')
-    logger.info('Alembic миграции применены')
+    await _transition_to_split_histories()
+    await _run_alembic_command(upstream_cfg, command.upgrade, 'head')
+    logger.info('Alembic upstream миграции применены')
+    await _run_alembic_command(custom_cfg, command.upgrade, 'head')
+    logger.info('Alembic custom миграции применены')
 
 
 async def stamp_alembic_head() -> None:
-    """Stamp the DB as being at head without running migrations (for existing DBs)."""
-    await _stamp_alembic_revision('head')
+    """Stamp the DB as being at head in both migration histories."""
+    upstream_cfg = _get_alembic_config(_UPSTREAM_ALEMBIC_INI)
+    custom_cfg = _get_alembic_config(_CUSTOM_ALEMBIC_INI)
+    await _stamp_alembic_revision(upstream_cfg, 'head')
+    await _stamp_alembic_revision(custom_cfg, 'head')
 
 
-async def _stamp_alembic_revision(revision: str) -> None:
+async def _stamp_alembic_revision(cfg: Config, revision: str) -> None:
     """Stamp the DB at a specific revision without running migrations."""
-    import asyncio
-
-    cfg = _get_alembic_config()
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, command.stamp, cfg, revision)
-    logger.info('Alembic: база отмечена как актуальная', revision=revision)
+    await _run_alembic_command(cfg, command.stamp, revision)
+    logger.info(
+        'Alembic: база отмечена как актуальная',
+        revision=revision,
+        script_location=cfg.get_main_option('script_location'),
+    )

@@ -16,6 +16,7 @@
 !uv.lock
 !requirements.txt
 !alembic.ini
+!alembic_custom.ini
 !release-please-config.json
 !.release-please-manifest.json
 

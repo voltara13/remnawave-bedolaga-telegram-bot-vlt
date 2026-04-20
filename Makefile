@@ -41,20 +41,35 @@ fix: ## Исправить код (ruff check --fix + format)
 	uv run ruff format .
 
 .PHONY: migrate
-migrate: ## Применить миграции (alembic upgrade head)
+migrate: ## Применить upstream + custom миграции
+	uv run alembic upgrade head
+	uv run alembic -c alembic_custom.ini upgrade head
+
+.PHONY: migrate-upstream
+migrate-upstream: ## Применить только upstream миграции
 	uv run alembic upgrade head
 
+.PHONY: migrate-custom
+migrate-custom: ## Применить только custom миграции
+	uv run alembic -c alembic_custom.ini upgrade head
+
 .PHONY: migration
-migration: ## Создать миграцию (usage: make migration m="description")
+migration: ## Создать custom миграцию (usage: make migration m="description")
+	uv run alembic -c alembic_custom.ini revision --autogenerate -m "$(m)"
+
+.PHONY: migration-upstream
+migration-upstream: ## Создать upstream миграцию
 	uv run alembic revision --autogenerate -m "$(m)"
 
 .PHONY: migrate-stamp
-migrate-stamp: ## Пометить БД как актуальную (для существующих БД)
+migrate-stamp: ## Пометить upstream + custom истории как актуальные
 	uv run alembic stamp head
+	uv run alembic -c alembic_custom.ini stamp head
 
 .PHONY: migrate-history
-migrate-history: ## Показать историю миграций
+migrate-history: ## Показать upstream + custom историю миграций
 	uv run alembic history --verbose
+	uv run alembic -c alembic_custom.ini history --verbose
 
 .PHONY: help
 help: ## Показать список доступных команд

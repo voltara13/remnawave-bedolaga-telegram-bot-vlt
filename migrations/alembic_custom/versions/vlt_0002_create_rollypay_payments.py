@@ -1,7 +1,7 @@
-"""create aurapay_payments table
+"""create rollypay_payments table
 
-Revision ID: 0063
-Revises: 0062
+Revision ID: vlt_0002
+Revises: vlt_0001
 Create Date: 2026-04-15
 
 """
@@ -11,19 +11,19 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = '0063'
-down_revision: Union[str, None] = '0062'
+revision: str = 'vlt_0002'
+down_revision: Union[str, None] = 'vlt_0001'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
     op.create_table(
-        'aurapay_payments',
+        'rollypay_payments',
         sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column('user_id', sa.Integer(), sa.ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True),
         sa.Column('order_id', sa.String(64), unique=True, nullable=False, index=True),
-        sa.Column('aurapay_invoice_id', sa.String(128), unique=True, nullable=True, index=True),
+        sa.Column('rollypay_payment_id', sa.String(128), unique=True, nullable=True, index=True),
         sa.Column('amount_kopeks', sa.Integer(), nullable=False),
         sa.Column('currency', sa.String(10), nullable=False, server_default='RUB'),
         sa.Column('description', sa.Text(), nullable=True),
@@ -44,4 +44,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_table('aurapay_payments')
+    op.drop_table('rollypay_payments')

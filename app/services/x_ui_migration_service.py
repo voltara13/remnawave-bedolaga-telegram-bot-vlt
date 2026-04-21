@@ -200,6 +200,10 @@ async def migrate_vless_subscription(
             tariff_id=tariff.id,
         )
 
+    old_email = (old_client.email or '').strip()
+    if old_email:
+        subscription.name = old_email[:255]
+
     migration_record = XUiMigration(
         old_uuid=uuid.lower(),
         user_id=user.id,

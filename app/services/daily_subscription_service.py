@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 import structlog
 from aiogram import Bot
-from sqlalchemy import select
+from sqlalchemy import inspect as sa_inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -20,10 +20,11 @@ from app.database.crud.subscription import (
     suspend_daily_subscription_insufficient_balance,
     update_daily_charge_time,
 )
+from app.database.crud.tariff import get_tariff_by_id
 from app.database.crud.transaction import create_transaction
 from app.database.crud.user import get_user_by_id, subtract_user_balance
 from app.database.database import AsyncSessionLocal
-from app.database.models import PaymentMethod, Subscription, SubscriptionStatus, TransactionType, User
+from app.database.models import PaymentMethod, Subscription, SubscriptionStatus, Tariff, TransactionType, User
 from app.localization.texts import get_texts
 from app.services.notification_delivery_service import (
     NotificationType,
@@ -55,6 +56,43 @@ class DailySubscriptionService:
     def get_check_interval_minutes(self) -> int:
         """Возвращает интервал проверки в минутах."""
         return getattr(settings, 'DAILY_SUBSCRIPTIONS_CHECK_INTERVAL_MINUTES', 30)
+
+    @staticmethod
+    def _get_loaded_subscription_user(subscription: Subscription) -> User | None:
+        """Возвращает user только если relationship уже загружен в объект."""
+        return sa_inspect(subscription).dict.get('user')
+
+    @staticmethod
+    def _get_loaded_subscription_tariff(subscription: Subscription) -> Tariff | None:
+        """Возвращает tariff только если relationship уже загружен в объект."""
+        return sa_inspect(subscription).dict.get('tariff')
+
+    async def _load_subscription_context(
+        self,
+        db: AsyncSession,
+        subscription: Subscription,
+    ) -> tuple[User | None, Tariff | None]:
+        """
+        Загружает зависимости подписки без lazy loading.
+
+        После commit/refresh relationship может оказаться не загружен. В async ORM
+        прямой доступ к `subscription.user`/`subscription.tariff` в таком состоянии
+        приводит к MissingGreenlet, поэтому здесь используем только already-loaded
+        state и явные async-запросы.
+        """
+        user = self._get_loaded_subscription_user(subscription)
+        if user is None:
+            user = await get_user_by_id(db, subscription.user_id)
+            if user is not None:
+                subscription.user = user
+
+        tariff = self._get_loaded_subscription_tariff(subscription)
+        if tariff is None and subscription.tariff_id is not None:
+            tariff = await get_tariff_by_id(db, subscription.tariff_id, with_promo_groups=False)
+            if tariff is not None:
+                subscription.tariff = tariff
+
+        return user, tariff
 
     async def process_daily_charges(self) -> dict:
         """
@@ -102,22 +140,19 @@ class DailySubscriptionService:
 
         return stats
 
-    async def _process_single_charge(self, db, subscription) -> str:
+    async def _process_single_charge(self, db: AsyncSession, subscription: Subscription) -> str:
         """
         Обрабатывает списание для одной подписки.
 
         Returns:
             str: "charged", "suspended", "error", "skipped"
         """
-        user = subscription.user
-        if not user:
-            user = await get_user_by_id(db, subscription.user_id)
+        user, tariff = await self._load_subscription_context(db, subscription)
 
         if not user:
             logger.warning('Пользователь не найден для подписки', subscription_id=subscription.id)
             return 'error'
 
-        tariff = subscription.tariff
         if not tariff:
             logger.warning('Тариф не найден для подписки', subscription_id=subscription.id)
             return 'error'
@@ -325,8 +360,9 @@ class DailySubscriptionService:
         balance_rubles = user.balance_kopeks / 100
 
         tariff_label = ''
-        if settings.is_multi_tariff_enabled() and hasattr(subscription, 'tariff') and subscription.tariff:
-            tariff_label = f'\n📦 Тариф: «{subscription.tariff.name}»'
+        loaded_tariff = self._get_loaded_subscription_tariff(subscription)
+        if settings.is_multi_tariff_enabled() and loaded_tariff:
+            tariff_label = f'\n📦 Тариф: «{loaded_tariff.name}»'
         message = (
             f'💳 <b>Суточное списание</b>\n\n'
             f'Списано: {amount_rubles:.2f} ₽\n'
@@ -355,8 +391,9 @@ class DailySubscriptionService:
         balance_rubles = user.balance_kopeks / 100
 
         tariff_label = ''
-        if settings.is_multi_tariff_enabled() and hasattr(subscription, 'tariff') and subscription.tariff:
-            tariff_label = f' «{subscription.tariff.name}»'
+        loaded_tariff = self._get_loaded_subscription_tariff(subscription)
+        if settings.is_multi_tariff_enabled() and loaded_tariff:
+            tariff_label = f' «{loaded_tariff.name}»'
         message = (
             f'⚠️ <b>Подписка{tariff_label} приостановлена</b>\n\n'
             f'Недостаточно средств для суточной оплаты.\n\n'
@@ -625,7 +662,6 @@ class DailySubscriptionService:
                             # и будет подхвачена на следующем цикле.
                             subscription.status = SubscriptionStatus.ACTIVE.value
                             await db.commit()
-                            await db.refresh(subscription)
 
                             logger.info(
                                 '✅ Суточная подписка возобновлена (DISABLED→ACTIVE, баланс пополнен)',
@@ -658,7 +694,6 @@ class DailySubscriptionService:
                             # Восстанавливаем в ACTIVE — charge обновит end_date и last_daily_charge_at
                             subscription.status = SubscriptionStatus.ACTIVE.value
                             await db.commit()
-                            await db.refresh(subscription)
 
                             logger.warning(
                                 '🔄 Суточная подписка восстановлена (EXPIRED→ACTIVE, ошибочный expire)',

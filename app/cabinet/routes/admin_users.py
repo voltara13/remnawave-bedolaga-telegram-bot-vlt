@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.database.crud.campaign import get_campaign_registration_by_user
 from app.database.crud.subscription import (
+    decrement_subscription_server_counts,
     extend_subscription,
 )
 from app.database.crud.tariff import get_tariff_by_id
@@ -2449,7 +2450,7 @@ async def reset_user_subscription(
 async def delete_user_subscription(
     user_id: int,
     subscription_id: int,
-    deactivate_in_panel: bool = Query(True, description='Also deactivate in Remnawave panel'),
+    deactivate_in_panel: bool = Query(True, description='Also remove subscription user from Remnawave panel'),
     reason: str | None = Query(None, max_length=500, description='Reason for subscription deletion'),
     admin: User = Depends(require_permission('users:subscription')),
     db: AsyncSession = Depends(get_cabinet_db),
@@ -2458,8 +2459,10 @@ async def delete_user_subscription(
     Delete a specific user subscription.
 
     Actions:
-    - Deactivate subscription in Remnawave panel (optional)
-    - Remove subscription and related records from bot database
+    - In multi-tariff mode: fully delete the subscription user from Remnawave panel
+    - In single-tariff mode: fully delete the Remnawave user only when deleting the last subscription
+    - Decrement server counters
+    - Remove subscription and cascaded records from bot database
     """
     user = await get_user_by_id(db, user_id)
     if not user:
@@ -2484,20 +2487,23 @@ async def delete_user_subscription(
             from app.services.subscription_service import SubscriptionService
 
             subscription_service = SubscriptionService()
-            sub_uuid = (
-                subscription.remnawave_uuid if settings.is_multi_tariff_enabled() else user.remnawave_uuid
-            )
-            if sub_uuid:
-                panel_deactivated = await subscription_service.disable_remnawave_user(sub_uuid)
+            if settings.is_multi_tariff_enabled():
+                sub_uuid = subscription.remnawave_uuid
+                if sub_uuid:
+                    panel_deactivated = await subscription_service.delete_remnawave_user(sub_uuid)
+            else:
+                remaining_subscriptions = [sub for sub in subs if sub.id != subscription.id]
+                if not remaining_subscriptions and user.remnawave_uuid:
+                    panel_deactivated = await subscription_service.delete_remnawave_user(user.remnawave_uuid)
+                    if panel_deactivated:
+                        user.remnawave_uuid = None
         except Exception as e:
             panel_error = 'Ошибка обработки пользователя в Remnawave'
-            logger.warning('Failed to disable Remnawave user during subscription delete', error=e)
+            logger.warning('Failed to delete Remnawave user during subscription delete', error=e)
 
-    from sqlalchemy import delete
+    await decrement_subscription_server_counts(db, subscription)
 
-    await db.execute(delete(TrafficPurchase).where(TrafficPurchase.subscription_id == subscription.id))
-    await db.execute(delete(SubscriptionServer).where(SubscriptionServer.subscription_id == subscription.id))
-    await db.execute(delete(Subscription).where(Subscription.id == subscription.id))
+    await db.delete(subscription)
 
     user.updated_at = datetime.now(UTC)
     await db.commit()

@@ -76,6 +76,8 @@ services:
       - ./uploads:/app/uploads:rw
       # Логотип для сообщений
       - ./vpn_logo.png:/app/vpn_logo.png:ro
+      # Архивные SQLite БД от старой панели 3x-ui (для миграции подписок)
+      - ./old-x-ui-db:/app/old-x-ui-db:ro
     expose:
       - '8080'
     networks:

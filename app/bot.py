@@ -19,6 +19,7 @@ from app.handlers import (
     subscription,
     support,
     tickets,
+    x_ui_migration,
 )
 from app.handlers.admin import (
     backup as admin_backup,
@@ -222,9 +223,11 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
     user_contests.register_handlers(dp)
     user_polls.register_handlers(dp)
     simple_subscription.register_simple_subscription_handlers(dp)
+    x_ui_migration.register_handlers(dp)
     logger.info('⭐ Зарегистрированы обработчики Telegram Stars платежей')
     logger.info('⚡ Зарегистрированы обработчики простой покупки')
     logger.info('⚡ Зарегистрированы обработчики простой подписки')
+    logger.info('🔁 Зарегистрированы обработчики миграции 3x-ui')
 
     if settings.is_maintenance_monitoring_enabled():
         try:

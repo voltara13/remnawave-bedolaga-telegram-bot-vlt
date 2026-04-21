@@ -3618,3 +3618,23 @@ class NewsTag(Base):
 
     def __repr__(self) -> str:
         return f"<NewsTag id={self.id} name='{self.name}'>"
+
+
+class XUiMigration(Base):
+    """Запись о миграции клиента 3x-ui в текущую систему (по UUID из VLESS-ссылки)."""
+
+    __tablename__ = 'x_ui_migrations'
+
+    id = Column(Integer, primary_key=True)
+    old_uuid = Column(String(64), nullable=False, unique=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    subscription_id = Column(Integer, ForeignKey('subscriptions.id', ondelete='SET NULL'), nullable=True, index=True)
+    tariff_id = Column(Integer, nullable=True)
+    old_email = Column(String(255), nullable=True)
+    source_db = Column(String(255), nullable=True)
+    old_expiry_time_ms = Column(BigInteger, nullable=True)
+    created_at = Column(AwareDateTime(), server_default=func.now(), nullable=False)
+
+    def __repr__(self) -> str:
+        return f'<XUiMigration id={self.id} old_uuid={self.old_uuid} user_id={self.user_id}>'
+

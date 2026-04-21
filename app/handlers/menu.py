@@ -199,6 +199,11 @@ async def show_main_menu(
             subscription_is_active=subscription_is_active,
         )
 
+    if settings.is_x_ui_migration_enabled():
+        from app.handlers.x_ui_migration import build_entry_button
+
+        custom_buttons.append(build_entry_button(db_user.language))
+
     keyboard = await get_main_menu_keyboard_async(
         db=db,
         user=db_user,
@@ -1094,6 +1099,11 @@ async def handle_back_to_menu(callback: types.CallbackQuery, state: FSMContext, 
             has_active_subscription=has_active_subscription,
             subscription_is_active=subscription_is_active,
         )
+
+    if settings.is_x_ui_migration_enabled():
+        from app.handlers.x_ui_migration import build_entry_button
+
+        custom_buttons.append(build_entry_button(db_user.language))
 
     keyboard = await get_main_menu_keyboard_async(
         db=db,

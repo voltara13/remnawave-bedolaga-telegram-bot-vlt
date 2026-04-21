@@ -1531,6 +1531,11 @@ class Settings(BaseSettings):
         """Backward-compatible alias for :meth:`is_cabinet_mode`."""
         return self.is_cabinet_mode()
 
+    def is_x_ui_migration_enabled(self) -> bool:
+        """Включена ли функция миграции подписок из старой панели 3x-ui."""
+        raw = os.getenv('X_UI_MIGRATION_ENABLED', 'true').strip().lower()
+        return raw in ('1', 'true', 'yes', 'on')
+
     def get_main_menu_miniapp_url(self) -> str | None:
         for candidate in [self.MINIAPP_CUSTOM_URL, self.MINIAPP_PURCHASE_URL]:
             value = (candidate or '').strip()

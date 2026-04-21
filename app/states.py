@@ -282,3 +282,7 @@ class ReferralWithdrawalStates(StatesGroup):
     waiting_for_amount = State()
     waiting_for_payment_details = State()
     confirming = State()
+
+
+class XUiMigrationStates(StatesGroup):
+    waiting_for_vless_link = State()

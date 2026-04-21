@@ -168,6 +168,7 @@ def _build_subscription_info(subscription: Subscription, tariff_name: str | None
 
     return UserSubscriptionInfo(
         id=subscription.id,
+        name=subscription.name,
         status=subscription.status,
         is_trial=subscription.is_trial,
         start_date=subscription.start_date,

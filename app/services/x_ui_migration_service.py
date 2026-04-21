@@ -97,6 +97,25 @@ def _pick_period_days(tariff: Tariff, fallback: int) -> int:
     return fallback
 
 
+def _remaining_days_from_expiry_ms(expiry_time_ms: int, *, now: datetime | None = None) -> int | None:
+    """Возвращает остаток дней по expiryTime из 3x-ui.
+
+    3x-ui хранит expiryTime в миллисекундах Unix timestamp.
+    Для активной подписки округляем вверх до целого дня, чтобы не терять
+    последний неполный день при переносе.
+    """
+    if expiry_time_ms <= 0:
+        return None
+
+    current_time = now or datetime.now(UTC)
+    expiry_at = datetime.fromtimestamp(expiry_time_ms / 1000, tz=UTC)
+    remaining_seconds = (expiry_at - current_time).total_seconds()
+    if remaining_seconds <= 0:
+        return 0
+
+    return max(1, int((remaining_seconds + 86399) // 86400))
+
+
 async def _get_existing_migration(db: AsyncSession, old_uuid: str) -> XUiMigration | None:
     query = select(XUiMigration).where(XUiMigration.old_uuid == old_uuid.lower())
     result = await db.execute(query)
@@ -141,6 +160,7 @@ async def migrate_vless_subscription(
     Бросает XUiMigrationError с кодами:
     - invalid_url: не удалось распарсить UUID
     - not_found: клиент не найден в 3x-ui БД
+    - expired: срок старой подписки уже истёк
     - already_migrated: UUID уже использовался для миграции
     - tariff_missing: не найден нужный тариф (стандартный/навсегда)
     """
@@ -175,10 +195,16 @@ async def migrate_vless_subscription(
             f'Не удалось найти активный тариф с id={target_id}.',
         )
 
-    period_days = _pick_period_days(
-        tariff,
-        DEFAULT_FOREVER_PERIOD_DAYS if is_unlimited else DEFAULT_STANDARD_PERIOD_DAYS,
-    )
+    if is_unlimited:
+        period_days = _pick_period_days(tariff, DEFAULT_FOREVER_PERIOD_DAYS)
+    else:
+        period_days = _remaining_days_from_expiry_ms(old_client.expiry_time_ms)
+        if not period_days:
+            raise XUiMigrationError(
+                'expired',
+                'Срок старой подписки уже истёк, перенести её нельзя.',
+            )
+
     apology_days = _apology_days()
     total_days = period_days + apology_days
 

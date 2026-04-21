@@ -40,6 +40,7 @@ class XUiMigrateResponse(BaseModel):
 _ERROR_HTTP_STATUSES = {
     'invalid_url': status.HTTP_400_BAD_REQUEST,
     'not_found': status.HTTP_404_NOT_FOUND,
+    'expired': status.HTTP_409_CONFLICT,
     'already_migrated': status.HTTP_409_CONFLICT,
     'tariff_missing': status.HTTP_503_SERVICE_UNAVAILABLE,
 }

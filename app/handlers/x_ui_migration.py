@@ -119,6 +119,7 @@ def _format_success(texts, *, tariff_name: str, was_unlimited: bool, apology_day
 _ERROR_MESSAGES = {
     'invalid_url': 'X_UI_MIGRATION_ERR_INVALID',
     'not_found': 'X_UI_MIGRATION_ERR_NOT_FOUND',
+    'expired': 'X_UI_MIGRATION_ERR_EXPIRED',
     'already_migrated': 'X_UI_MIGRATION_ERR_ALREADY',
     'tariff_missing': 'X_UI_MIGRATION_ERR_TARIFF',
 }
@@ -126,6 +127,7 @@ _ERROR_MESSAGES = {
 _ERROR_DEFAULTS = {
     'invalid_url': '❌ Не удалось распознать VLESS-ссылку. Проверьте формат и попробуйте снова.',
     'not_found': '❌ Подписка с таким UUID не найдена в архивах 3x-ui.',
+    'expired': '❌ Срок старой подписки уже истёк, перенести её нельзя.',
     'already_migrated': 'ℹ️ Эта ссылка уже была мигрирована ранее.',
     'tariff_missing': '❌ Не удалось найти подходящий тариф. Обратитесь в поддержку.',
 }

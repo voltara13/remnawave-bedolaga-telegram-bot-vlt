@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.database.crud.server_squad import get_all_server_squads
 from app.database.crud.subscription import create_paid_subscription, extend_subscription
 from app.database.models import Subscription, SubscriptionStatus, Tariff, User, XUiMigration
@@ -186,7 +187,11 @@ async def migrate_vless_subscription(
         all_servers, _ = await get_all_server_squads(db, available_only=True)
         squads = [s.squad_uuid for s in all_servers if s.squad_uuid]
 
-    existing_subscription = await _resolve_existing_subscription(db, user, tariff)
+    # In multi-tariff mode each migrated legacy UUID must become a separate
+    # subscription, even if the target tariff matches an existing one.
+    existing_subscription = None
+    if not settings.is_multi_tariff_enabled():
+        existing_subscription = await _resolve_existing_subscription(db, user, tariff)
 
     if existing_subscription is not None:
         subscription = await extend_subscription(

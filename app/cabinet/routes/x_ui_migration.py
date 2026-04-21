@@ -23,7 +23,7 @@ router = APIRouter(prefix='/x-ui-migration', tags=['Cabinet 3x-ui Migration'])
 class XUiMigrateRequest(BaseModel):
     """Запрос на перенос подписки из 3x-ui по VLESS-ссылке или UUID."""
 
-    link: str = Field(..., min_length=1, max_length=2048, description='VLESS-ссылка или UUID клиента из старой панели')
+    link: str = Field(..., min_length=1, max_length=4096, description='VLESS-ссылка или UUID клиента из старой панели')
 
 
 class XUiMigrateResponse(BaseModel):

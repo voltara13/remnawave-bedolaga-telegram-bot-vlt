@@ -27,8 +27,12 @@ _UPSTREAM_SUBSCRIPTION_NAME_REVISION = '0060'
 _CUSTOM_PAYPEAR_REVISION = 'vlt_0001'
 _CUSTOM_ROLLYPAY_REVISION = 'vlt_0002'
 _CUSTOM_AURAPAY_REVISION = 'vlt_0003'
+_CUSTOM_X_UI_MIGRATIONS_REVISION = 'vlt_0004'
 
+# Порядок важен: при наличии таблицы — инферится соответствующая ревизия,
+# более новые ревизии должны быть выше, чтобы перекрывать предыдущие.
 _CUSTOM_SCHEMA_REVISIONS = (
+    ('x_ui_migrations', _CUSTOM_X_UI_MIGRATIONS_REVISION),
     ('aurapay_payments', _CUSTOM_AURAPAY_REVISION),
     ('rollypay_payments', _CUSTOM_ROLLYPAY_REVISION),
     ('paypear_payments', _CUSTOM_PAYPEAR_REVISION),

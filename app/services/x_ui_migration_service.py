@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -52,10 +52,19 @@ DEFAULT_STANDARD_PERIOD_DAYS = 30
 # Период по умолчанию для тарифа «Навсегда» (10 лет)
 DEFAULT_FOREVER_PERIOD_DAYS = 3650
 
+# Идентификаторы тарифов по умолчанию (матчат текущую БД: 3=Стандартный, 5=Навсегда)
+DEFAULT_STANDARD_TARIFF_ID = 3
+DEFAULT_FOREVER_TARIFF_ID = 5
 
-def _get_tariff_name(env_key: str, default: str) -> str:
-    value = os.getenv(env_key)
-    return value.strip() if value and value.strip() else default
+
+def _get_tariff_id(env_key: str, default: int) -> int:
+    raw = os.getenv(env_key)
+    if not raw:
+        return default
+    try:
+        return int(raw.strip())
+    except ValueError:
+        return default
 
 
 def _apology_days() -> int:
@@ -68,10 +77,10 @@ def _apology_days() -> int:
         return DEFAULT_APOLOGY_DAYS
 
 
-async def _get_tariff_by_name(db: AsyncSession, name: str) -> Tariff | None:
+async def _get_tariff_by_id(db: AsyncSession, tariff_id: int) -> Tariff | None:
     query = (
         select(Tariff)
-        .where(func.lower(Tariff.name) == name.lower())
+        .where(Tariff.id == tariff_id)
         .where(Tariff.is_active.is_(True))
         .options(selectinload(Tariff.allowed_promo_groups))
     )
@@ -154,15 +163,15 @@ async def migrate_vless_subscription(
 
     is_unlimited = old_client.has_unlimited_duration
 
-    standard_name = _get_tariff_name('X_UI_MIGRATION_STANDARD_TARIFF_NAME', 'Стандартный')
-    forever_name = _get_tariff_name('X_UI_MIGRATION_FOREVER_TARIFF_NAME', 'Навсегда')
+    standard_id = _get_tariff_id('X_UI_MIGRATION_STANDARD_TARIFF_ID', DEFAULT_STANDARD_TARIFF_ID)
+    forever_id = _get_tariff_id('X_UI_MIGRATION_FOREVER_TARIFF_ID', DEFAULT_FOREVER_TARIFF_ID)
 
-    target_name = forever_name if is_unlimited else standard_name
-    tariff = await _get_tariff_by_name(db, target_name)
+    target_id = forever_id if is_unlimited else standard_id
+    tariff = await _get_tariff_by_id(db, target_id)
     if tariff is None:
         raise XUiMigrationError(
             'tariff_missing',
-            f'Не удалось найти активный тариф «{target_name}».',
+            f'Не удалось найти активный тариф с id={target_id}.',
         )
 
     period_days = _pick_period_days(

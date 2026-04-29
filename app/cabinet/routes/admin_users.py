@@ -122,6 +122,7 @@ def _build_user_list_item(user: User, spending_stats: dict = None) -> UserListIt
     subscription_is_trial = False
     subscription_end_date = None
     has_subscription = False
+    subscription_name = None
     tariff_id = None
     tariff_name = None
     traffic_used_gb = 0.0
@@ -134,6 +135,7 @@ def _build_user_list_item(user: User, spending_stats: dict = None) -> UserListIt
     if subscription:
         has_subscription = True
         subscription_status = subscription.status
+        subscription_name = subscription.name
         subscription_is_trial = subscription.is_trial
         subscription_end_date = subscription.end_date
         tariff_id = subscription.tariff_id
@@ -156,6 +158,7 @@ def _build_user_list_item(user: User, spending_stats: dict = None) -> UserListIt
             sub_list.append(
                 SubscriptionListItem(
                     id=s.id,
+                    name=s.name,
                     tariff_id=s.tariff_id,
                     tariff_name=s.tariff.name if s.tariff else None,
                     status=s.status,
@@ -180,6 +183,7 @@ def _build_user_list_item(user: User, spending_stats: dict = None) -> UserListIt
         created_at=user.created_at,
         last_activity=user.last_activity,
         has_subscription=has_subscription,
+        subscription_name=subscription_name,
         subscription_status=subscription_status,
         subscription_is_trial=subscription_is_trial,
         subscription_end_date=subscription_end_date,
@@ -480,6 +484,7 @@ async def list_users(
     limit: int = Query(50, ge=1, le=200),
     search: str | None = Query(None, max_length=255),
     email: str | None = Query(None, max_length=255),
+    subscription_name: str | None = Query(None, max_length=255),
     status: UserStatusEnum | None = Query(None),
     subscription_status: str | None = Query(None, max_length=20),
     tariff_id: str | None = Query(None, max_length=255),
@@ -497,6 +502,7 @@ async def list_users(
     - **limit**: Number of users per page (max 200)
     - **search**: Search by telegram_id, username, first_name, last_name
     - **email**: Search by email
+    - **subscription_name**: Search by custom subscription name
     - **status**: Filter by user status (active, blocked, deleted)
     - **sort_by**: Sort field (created_at, balance, traffic, last_activity, total_spent, purchase_count)
     """
@@ -526,6 +532,7 @@ async def list_users(
         limit=limit,
         search=search,
         email=email,
+        subscription_name=subscription_name,
         status=user_status,
         subscription_status=subscription_status,
         tariff_ids=tariff_ids,
@@ -544,6 +551,7 @@ async def list_users(
         status=user_status,
         search=search,
         email=email,
+        subscription_name=subscription_name,
         subscription_status=subscription_status,
         tariff_ids=tariff_ids,
         promo_group_id=promo_group_id,

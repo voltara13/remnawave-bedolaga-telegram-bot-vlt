@@ -19,6 +19,7 @@ from app.database.models import (
     PromoGroup,
     Subscription,
     SubscriptionStatus,
+    Tariff,
     Transaction,
     TransactionType,
     User,
@@ -862,6 +863,7 @@ async def get_users_list(
     limit: int = 50,
     search: str | None = None,
     email: str | None = None,
+    subscription_name: str | None = None,
     status: UserStatus | None = None,
     subscription_status: str | None = None,
     tariff_ids: list[int] | None = None,
@@ -884,12 +886,20 @@ async def get_users_list(
         query = query.where(User.status == status.value)
 
     # Subscription-level filters via subquery
-    if subscription_status or tariff_ids:
+    if subscription_status or tariff_ids or subscription_name:
         sub_conditions = []
         if subscription_status:
             sub_conditions.append(Subscription.status == subscription_status)
         if tariff_ids:
             sub_conditions.append(Subscription.tariff_id.in_(tariff_ids))
+        if subscription_name:
+            subscription_name_term = f'%{subscription_name}%'
+            sub_conditions.append(
+                or_(
+                    Subscription.name.ilike(subscription_name_term),
+                    Subscription.tariff.has(Tariff.name.ilike(subscription_name_term)),
+                )
+            )
         sub_query = select(Subscription.user_id).where(and_(*sub_conditions)).distinct().scalar_subquery()
         query = query.where(User.id.in_(sub_query))
 
@@ -1001,6 +1011,7 @@ async def get_users_count(
     status: UserStatus | None = None,
     search: str | None = None,
     email: str | None = None,
+    subscription_name: str | None = None,
     subscription_status: str | None = None,
     tariff_ids: list[int] | None = None,
     promo_group_id: int | None = None,
@@ -1012,12 +1023,20 @@ async def get_users_count(
     if status:
         query = query.where(User.status == status.value)
 
-    if subscription_status or tariff_ids:
+    if subscription_status or tariff_ids or subscription_name:
         sub_conditions = []
         if subscription_status:
             sub_conditions.append(Subscription.status == subscription_status)
         if tariff_ids:
             sub_conditions.append(Subscription.tariff_id.in_(tariff_ids))
+        if subscription_name:
+            subscription_name_term = f'%{subscription_name}%'
+            sub_conditions.append(
+                or_(
+                    Subscription.name.ilike(subscription_name_term),
+                    Subscription.tariff.has(Tariff.name.ilike(subscription_name_term)),
+                )
+            )
         sub_query = select(Subscription.user_id).where(and_(*sub_conditions)).distinct().scalar_subquery()
         query = query.where(User.id.in_(sub_query))
 

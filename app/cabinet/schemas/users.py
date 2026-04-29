@@ -87,6 +87,7 @@ class SubscriptionListItem(BaseModel):
     """Compact subscription info for user list (multi-tariff mode)."""
 
     id: int
+    name: str | None = None
     tariff_id: int | None = None
     tariff_name: str | None = None
     status: str
@@ -114,6 +115,7 @@ class UserListItem(BaseModel):
 
     # Subscription summary
     has_subscription: bool = False
+    subscription_name: str | None = None
     subscription_status: str | None = None
     subscription_is_trial: bool = False
     subscription_end_date: datetime | None = None
